@@ -55,11 +55,16 @@ public class ControladorJugador : MonoBehaviour
     {
         yield return null;
 
+        string escenaActual = SceneManager.GetActiveScene().name;
         int slot = PlayerPrefs.GetInt("SlotACargar", -1);
+        bool posicionRestaurada = false;
 
+        // [2026-11-25][WHITE-BOX] Rama 1: Aqui se verifica si existe el slot de la partida guardada en json
         if (slot != -1 && SistemaGuardadoJSON.ExistePartida(slot))
         {
             DatosPartida datos = SistemaGuardadoJSON.CargarPartida(slot);
+
+            Debug.Log($"[2026-11-25][WHITE-BOX] Rama RestaurarPartida ACTIVA | Slot={slot} | EscenaActual={escenaActual} | EscenaGuardada={datos?.escenaReal}");
 
             if (datos != null)
             {
@@ -68,18 +73,11 @@ public class ControladorJugador : MonoBehaviour
                     jugadorId = datos.jugadorId;
                 }
 
-                string escenaActual = SceneManager.GetActiveScene().name;
-                bool esNuevoNivel = (escenaActual == "Nivel2_Espacio");
-
-                if (!esNuevoNivel)
+                if (datos.escenaReal == escenaActual)
                 {
-                    if (characterController != null) characterController.enabled = false;
-                    transform.position = new Vector3(datos.posX, datos.posY, datos.posZ);
-                    if (characterController != null) characterController.enabled = true;
-                }
-                else
-                {
-                    Debug.Log("[ControladorJugador] Iniciando Nivel 2: Se respeta la posición en la escena frente a la nave.");
+                    MoverJugadorSeguro(new Vector3(datos.posX, datos.posY, datos.posZ));
+                    posicionRestaurada = true;
+                    Debug.Log($"[2026-11-25][WHITE-BOX] Sub-rama PosicionRestaurada=TRUE en {escenaActual}");
                 }
 
                 if (vidaHuaso != null && datos.vidaJugador > 0)
@@ -91,13 +89,33 @@ public class ControladorJugador : MonoBehaviour
                 {
                     ContadorMisiones.Instancia.RestaurarProgreso(datos.enemigosRestantes, datos.pistasEncontradas);
                 }
-
-                Debug.Log($"[ControladorJugador] ¡Partida restaurada con éxito para {jugadorId} desde Slot {slot}!");
             }
 
             PlayerPrefs.SetInt("SlotACargar", -1);
             PlayerPrefs.Save();
         }
+        else
+        {
+            Debug.Log($"[2026-11-25][WHITE-BOX] Rama RestaurarPartida OMITIDA (sin slot pendiente) | Slot={slot} | Escena={escenaActual}");
+        }
+
+        // [2026-11-25][WHITE-BOX] Rama 2: Si la posicion no se restauro en nivel2_espacio, usa spawnpoint_nivel2
+        if (!posicionRestaurada && escenaActual == "Nivel2_Espacio")
+        {
+            GameObject spawnNivel2 = GameObject.Find("SpawnPoint_Nivel2");
+            if (spawnNivel2 != null)
+            {
+                MoverJugadorSeguro(spawnNivel2.transform.position);
+                Debug.Log($"[2026-11-25][WHITE-BOX] Rama SpawnPoint_Nivel2 ejecutada en {spawnNivel2.transform.position}");
+            }
+        }
+    }
+
+    private void MoverJugadorSeguro(Vector3 destino)
+    {
+        if (characterController != null) characterController.enabled = false;
+        transform.position = destino;
+        if (characterController != null) characterController.enabled = true;
     }
 
     public void GuardarPartidaActual(int slot)
@@ -123,6 +141,7 @@ public class ControladorJugador : MonoBehaviour
         }
 
         SistemaGuardadoJSON.GuardarPartida(slot, jugadorId, datos);
+        Debug.Log($"[2026-11-25][WHITE-BOX] GuardarPartidaActual ejecutado | Slot={slot} | Escena={datos.escenaReal} | Vida={datos.vidaJugador}");
     }
 
     void Update()
